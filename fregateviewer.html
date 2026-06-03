@@ -277,6 +277,15 @@
       background-color: #ffffff;
     }
 
+    .tabulator .tabulator-cell.tabulator-editable {
+      background-color: #fff7ed;
+      cursor: text;
+    }
+
+    .tabulator .tabulator-cell.tabulator-editable:hover {
+      background-color: #ffedd5;
+    }
+
     .raw {
       max-width: 360px;
       overflow: hidden;
@@ -344,6 +353,7 @@
       <div class="actions">
         <button id="parseBtn">Parser</button>
         <button id="exportCsvBtn" class="secondary" disabled>Exporter CSV</button>
+        <button id="exportModifiedBtn" class="secondary" disabled>Générer fichier modifié</button>
         <span id="status" class="status">En attente des fichiers.</span>
       </div>
       <details style="margin-top:4px;">
@@ -426,6 +436,9 @@
     let parsedRows = [];
     let visibleRows = [];
     let resultTabulator = null;
+    let currentConfig = null;
+    let currentDataText = '';
+    let currentDataName = '';
 
     const $ = (id) => document.getElementById(id);
 
@@ -433,6 +446,7 @@
 
     $('parseBtn').addEventListener('click', parseFiles);
     $('exportCsvBtn').addEventListener('click', exportCsv);
+    $('exportModifiedBtn').addEventListener('click', exportModifiedFile);
     $('firstPageBtn').addEventListener('click', () => resultTabulator && resultTabulator.setPage('first'));
     $('prevPageBtn').addEventListener('click', () => resultTabulator && resultTabulator.previousPage());
     $('nextPageBtn').addEventListener('click', () => resultTabulator && resultTabulator.nextPage());
@@ -479,6 +493,9 @@
         );
 
         const config = parseXmlConfiguration(xmlText);
+        currentConfig = config;
+        currentDataText = dataText;
+        currentDataName = dataInput ? dataInput.name : localStorage.getItem(STORAGE_KEYS.dataName) || 'restored.dat';
         parsedRows = parseDataFile(dataText, config);
 
         populateTypeFilter(parsedRows);
@@ -486,6 +503,7 @@
         render();
 
         $('exportCsvBtn').disabled = parsedRows.length === 0;
+        $('exportModifiedBtn').disabled = parsedRows.length === 0;
         setStatus(`${parsedRows.length} ligne(s) analysée(s).`, 'ok');
       } catch (error) {
         console.error(error);
@@ -814,7 +832,15 @@
 
         const group = fregateGroups.get(sequence);
         group.rawLines.push(line);
-        group.parts.push({ lineNumber, recordNumber, occurrence, fregateParsed: fregateParsed.values });
+        group.parts.push({
+          lineNumber,
+          recordNumber,
+          occurrence,
+          rawLine: line,
+          technicalValues: technical.values,
+          fregateValues: fregateParsed.values,
+          occurrenceLength: (fregateParsed.values['N-ENREG-OCC'] || '').length
+        });
         group.warnings.push(...warnings);
       });
 
@@ -845,7 +871,13 @@
           'true',
           { values: {}, displayValues: {}, fieldNames: {}, fieldLabels: {} },
           group.rawLines.join('\n'),
-          [`Format fonctionnel FILE ID="${functionalType}" introuvable dans le XML`, ...warnings]
+          [`Format fonctionnel FILE ID="${functionalType}" introuvable dans le XML`, ...warnings],
+          null,
+          {
+            sourceLineNumbers: group.parts.map(part => part.lineNumber),
+            fregateParts: group.parts,
+            functionalRawMessage: aggregatedMessage
+          }
         );
       }
 
@@ -877,7 +909,12 @@
         { values: {}, displayValues: {}, fieldNames: {}, fieldLabels: {} },
         group.rawLines.join('\n'),
         warnings,
-        functional
+        functional,
+        {
+          sourceLineNumbers: group.parts.map(part => part.lineNumber),
+          fregateParts: group.parts,
+          functionalRawMessage: aggregatedMessage
+        }
       );
     }
 
@@ -920,7 +957,8 @@
         technical,
         line,
         warnings,
-        functional
+        functional,
+        { functionalRawMessage: zmsg }
       );
     }
 
@@ -1018,7 +1056,7 @@
     }
 
     
-    function makeBaseRow(lineNumber, lineKind, technicalFormat, appCode, subCode, functionalType, fregate, technical, rawLine, warnings = [], functional = null) {
+    function makeBaseRow(lineNumber, lineKind, technicalFormat, appCode, subCode, functionalType, fregate, technical, rawLine, warnings = [], functional = null, options = {}) {
       const displayedFunctionalType = (
         functional &&
         functional.meta &&
@@ -1039,12 +1077,17 @@
         fregate,
         warnings: warnings.join(' | '),
         rawLine,
+        functionalRawMessage: options.functionalRawMessage || '',
+        sourceLineNumbers: options.sourceLineNumbers || [lineNumber],
+        fregateParts: options.fregateParts || [],
         technicalValues: technical.values,
+        functionalFormatId: functional ? functional.formatId : '',
         functionalValues: functional ? functional.values : {},
         functionalFieldNames: functional ? functional.fieldNames : {},
         functionalFieldLabels: functional ? functional.fieldLabels : {},
         functionalValueDescriptions: functional ? functional.valueDescriptions : {},
         functionalMeta: functional && functional.meta ? functional.meta : {},
+        functionalColumnFieldIds: {},
         functionalColumnOrder: functional && functional.fieldLabels
           ? Object.keys(functional.fieldLabels).map(key => 'F_' + functional.fieldLabels[key])
           : []
@@ -1078,6 +1121,7 @@
     function flattenFunctionalFields(row, values, fieldLabels, valueDescriptions) {
       for (const [key, value] of Object.entries(values)) {
         const columnName = 'F_' + (fieldLabels[key] || key);
+        row.functionalColumnFieldIds[columnName] = key;
         row[columnName] = value;
         if (valueDescriptions[key]) {
           row[columnName + '__title'] = valueDescriptions[key];
@@ -1185,6 +1229,8 @@
         resizable: true,
         minWidth: col === 'lineNumber' ? 70 : 140,
         maxWidth: col === 'warnings' ? 420 : undefined,
+        editor: isEditableColumn(col) ? 'input' : false,
+        editable: cell => isEditableCell(cell, col),
         formatter: function(cell) {
           const value = cell.getValue() ?? '';
           const rowData = cell.getRow().getData();
@@ -1220,6 +1266,7 @@
           dataFiltered: updatePagerInfo,
           dataLoaded: updatePagerInfo
         });
+        resultTabulator.on('cellEdited', applyCellEdit);
         resultTabulator.on('pageLoaded', updatePagerInfo);
         resultTabulator.on('dataProcessed', updatePagerInfo);
         setTimeout(updatePagerInfo, 0);
@@ -1228,6 +1275,43 @@
         resultTabulator.setPageSize(parseInt($('pageSizeSelect').value, 10));
         resultTabulator.replaceData(rows).then(updatePagerInfo);
       }
+    }
+
+    function isEditableColumn(col) {
+      return col === 'appCode' || col === 'subCode' || col.startsWith('F_');
+    }
+
+    function isEditableCell(cell, col) {
+      const rowData = cell.getRow().getData();
+      if (rowData.lineKind !== 'MESSAGE') return false;
+      if (col === 'appCode' || col === 'subCode') return Boolean(rowData.technicalValues);
+      return Boolean(rowData.functionalColumnFieldIds && rowData.functionalColumnFieldIds[col]);
+    }
+
+    function applyCellEdit(cell) {
+      const row = cell.getRow().getData();
+      const field = cell.getField();
+      const value = String(cell.getValue() ?? '');
+
+      row.editedFields = row.editedFields || {};
+      row.editedFields[field] = true;
+
+      if (field === 'appCode') {
+        row.appCode = value;
+        if (row.technicalValues) row.technicalValues['C-APPL'] = value;
+      } else if (field === 'subCode') {
+        row.subCode = value;
+        if (row.technicalValues) row.technicalValues['SC-APPL'] = value;
+      } else if (field.startsWith('F_')) {
+        const functionalFieldId = row.functionalColumnFieldIds && row.functionalColumnFieldIds[field];
+        if (functionalFieldId) {
+          row.functionalValues[functionalFieldId] = value;
+          row[field] = value;
+        }
+      }
+
+      $('exportModifiedBtn').disabled = parsedRows.length === 0;
+      setStatus('Modification prise en compte. Tu peux générer le fichier modifié.', 'ok');
     }
 
     function updatePagerInfo() {
@@ -1266,6 +1350,182 @@
         return safe ? `<span class="pill">${safe}</span>` : '';
       }
       return safe;
+    }
+
+    function exportModifiedFile() {
+      if (!currentConfig || !currentDataText || !parsedRows.length) {
+        setStatus('Aucun fichier parsé à générer.', 'error');
+        return;
+      }
+
+      try {
+        const generated = buildModifiedDataText();
+        const extension = currentDataName.toLowerCase().endsWith('.gz') || currentDataName.toLowerCase().endsWith('.gzip')
+          ? currentDataName.replace(/\.(gz|gzip)$/i, '')
+          : currentDataName;
+        const downloadName = addModifiedSuffix(extension || 'fichier_metier.dat');
+        downloadTextFile(generated.text, downloadName, $('encoding').value);
+        setStatus(generated.warnings.length
+          ? `Fichier généré avec avertissement(s) :\n${generated.warnings.join('\n')}`
+          : 'Fichier modifié généré.', generated.warnings.length ? 'warning' : 'ok');
+      } catch (error) {
+        console.error(error);
+        setStatus(error.message || String(error), 'error');
+      }
+    }
+
+    function buildModifiedDataText() {
+      const lineEnding = detectLineEnding(currentDataText);
+      const hasFinalLineEnding = /\r\n$|\n$|\r$/.test(currentDataText);
+      const lines = splitDataLines(currentDataText);
+      const warnings = [];
+
+      parsedRows.forEach(row => {
+        if (row.lineKind !== 'MESSAGE') return;
+        const rebuilt = rebuildRowLines(row, warnings);
+        rebuilt.forEach(item => {
+          if (item.lineNumber >= 1 && item.lineNumber <= lines.length) {
+            lines[item.lineNumber - 1] = item.line;
+          }
+        });
+      });
+
+      return {
+        text: lines.join(lineEnding) + (hasFinalLineEnding ? lineEnding : ''),
+        warnings
+      };
+    }
+
+    function rebuildRowLines(row, warnings) {
+      const technicalFormat = getFile(currentConfig, row.technicalFormat);
+      if (!technicalFormat) {
+        warnings.push(`Ligne ${row.lineNumber} ignorée : format technique ${row.technicalFormat || '(vide)'} introuvable.`);
+        return [];
+      }
+
+      if (row.fregate === 'true' && row.fregateParts && row.fregateParts.length) {
+        return rebuildFregateRowLines(row, technicalFormat, warnings);
+      }
+
+      const technicalValues = { ...(row.technicalValues || {}) };
+      if (row.editedFields && row.editedFields.appCode) technicalValues['C-APPL'] = row.appCode ?? technicalValues['C-APPL'];
+      if (row.editedFields && row.editedFields.subCode) technicalValues['SC-APPL'] = row.subCode ?? technicalValues['SC-APPL'];
+
+      const functionalMessage = buildFunctionalMessage(row, warnings);
+      if (functionalMessage != null && Object.prototype.hasOwnProperty.call(technicalValues, 'Z-MSG')) {
+        technicalValues['Z-MSG'] = functionalMessage;
+      }
+
+      return [{
+        lineNumber: row.lineNumber,
+        line: formatFixedLine(technicalValues, technicalFormat, row.rawLine || '')
+      }];
+    }
+
+    function rebuildFregateRowLines(row, technicalFormat, warnings) {
+      const fregateFormat = getFile(currentConfig, 'FREGATE_EDD');
+      if (!fregateFormat) {
+        warnings.push(`Ligne ${row.lineNumber} ignorée : format FREGATE_EDD introuvable.`);
+        return [];
+      }
+
+      const functionalMessage = buildFunctionalMessage(row, warnings) || '';
+      const sortedParts = [...row.fregateParts].sort((a, b) => a.recordNumber - b.recordNumber || a.lineNumber - b.lineNumber);
+      const totalOccurrenceLength = sortedParts.reduce((sum, part) => sum + (part.occurrenceLength || 0), 0);
+      if (functionalMessage.length > totalOccurrenceLength) {
+        warnings.push(`N-SEQ=${row.functionalMeta.fregateSequence || row.lineNumber} : message modifié tronqué (${functionalMessage.length} > ${totalOccurrenceLength}).`);
+      }
+
+      let cursor = 0;
+      return sortedParts.map(part => {
+        const occurrenceLength = part.occurrenceLength || (part.occurrence || '').length;
+        const occurrence = functionalMessage.substring(cursor, cursor + occurrenceLength).padEnd(occurrenceLength, ' ');
+        cursor += occurrenceLength;
+
+        const fregateValues = { ...(part.fregateValues || {}) };
+        fregateValues['N-ENREG-OCC'] = occurrence;
+
+        const technicalValues = { ...(part.technicalValues || {}) };
+        if (row.editedFields && row.editedFields.appCode) technicalValues['C-APPL'] = row.appCode ?? technicalValues['C-APPL'];
+        if (row.editedFields && row.editedFields.subCode) technicalValues['SC-APPL'] = row.subCode ?? technicalValues['SC-APPL'];
+        technicalValues['Z-MSG'] = formatFixedLine(fregateValues, fregateFormat, technicalValues['Z-MSG'] || '');
+
+        return {
+          lineNumber: part.lineNumber,
+          line: formatFixedLine(technicalValues, technicalFormat, part.rawLine || '')
+        };
+      });
+    }
+
+    function buildFunctionalMessage(row, warnings) {
+      if (!row.functionalFormatId || !row.functionalValues) return null;
+      const functionalFormat = getFile(currentConfig, row.functionalFormatId);
+      if (!functionalFormat) {
+        warnings.push(`Ligne ${row.lineNumber} : format fonctionnel ${row.functionalFormatId} introuvable, Z-MSG conservé.`);
+        return null;
+      }
+      return formatFixedLine(row.functionalValues, functionalFormat, row.functionalRawMessage || '', true);
+    }
+
+    function formatFixedLine(values, format, fallbackLine = '', preserveTail = false) {
+      let cursor = 0;
+      const formatted = format.fields.map(field => {
+        const fallback = fallbackLine.substring(cursor, cursor + field.length);
+        cursor += field.length;
+        const value = Object.prototype.hasOwnProperty.call(values, field.id) ? values[field.id] : fallback;
+        return fitFixedValue(value, field.length);
+      }).join('');
+      return preserveTail ? formatted + fallbackLine.substring(cursor) : formatted;
+    }
+
+    function fitFixedValue(value, length) {
+      const text = String(value ?? '');
+      if (text.length > length) return text.substring(0, length);
+      return text.padEnd(length, ' ');
+    }
+
+    function splitDataLines(text) {
+      return text
+        .replace(/\r\n/g, '\n')
+        .replace(/\r/g, '\n')
+        .split('\n')
+        .filter((line, index, arr) => !(index === arr.length - 1 && line === ''));
+    }
+
+    function detectLineEnding(text) {
+      const match = text.match(/\r\n|\n|\r/);
+      return match ? match[0] : '\n';
+    }
+
+    function addModifiedSuffix(fileName) {
+      const dotIndex = fileName.lastIndexOf('.');
+      if (dotIndex <= 0) return `${fileName}_modifie`;
+      return `${fileName.substring(0, dotIndex)}_modifie${fileName.substring(dotIndex)}`;
+    }
+
+    function downloadTextFile(text, fileName, encoding) {
+      const blobPart = encodeTextForDownload(text, encoding);
+      const blob = new Blob([blobPart], { type: `text/plain;charset=${encoding || 'UTF-8'}` });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }
+
+    function encodeTextForDownload(text, encoding) {
+      const normalizedEncoding = String(encoding || '').toLowerCase();
+      if (normalizedEncoding === 'iso-8859-1' || normalizedEncoding === 'windows-1252') {
+        const bytes = new Uint8Array(text.length);
+        for (let i = 0; i < text.length; i++) {
+          bytes[i] = text.charCodeAt(i) & 0xff;
+        }
+        return bytes;
+      }
+      return text;
     }
 
     function exportCsv() {
