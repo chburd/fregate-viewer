@@ -1,0 +1,1311 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Parseur de fichiers à format XML</title>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --card: #ffffff;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --border: #d1d5db;
+      --accent: #2563eb;
+      --accent-soft: #dbeafe;
+      --danger: #b91c1c;
+      --warning: #92400e;
+      --ok: #166534;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      padding: 10px 18px;
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      flex: 0 0 auto;
+    }
+
+    header h1 {
+      margin: 0 0 2px;
+      font-size: 18px;
+    }
+
+    header p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    main {
+      padding: 8px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 12px;
+    }
+
+    .form-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      max-width: 500px;
+    }
+
+    .filters-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: flex-end;
+    }
+
+    .filter-box {
+      width: 260px;
+      flex: 0 0 auto;
+    }
+
+    .pager-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 8px;
+      padding: 6px 8px;
+      background: #f8fafc;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      width: fit-content;
+      max-width: 100%;
+    }
+
+    .pager-bar button {
+      padding: 6px 10px;
+      font-size: 13px;
+    }
+
+    .pager-bar select {
+      width: auto;
+      padding: 6px 8px;
+    }
+
+    .pager-info {
+      font-size: 13px;
+      color: #334155;
+      min-width: 130px;
+    }
+
+    label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+
+    input[type="file"], input[type="text"], select {
+      width: 100%;
+      padding: 9px 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: white;
+      font-size: 14px;
+    }
+
+    button {
+      border: 0;
+      border-radius: 8px;
+      padding: 10px 14px;
+      background: var(--accent);
+      color: white;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    button.secondary {
+      background: #374151;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      margin-top: 12px;
+    }
+
+    .status {
+      font-size: 14px;
+      color: var(--muted);
+      white-space: pre-wrap;
+    }
+
+    .restore-info {
+      margin-top: 8px;
+      font-size: 13px;
+      color: #475569;
+    }
+
+    .drop-zone {
+      margin-top: 10px;
+      padding: 14px;
+      border: 2px dashed #94a3b8;
+      border-radius: 10px;
+      background: #f8fafc;
+      color: #475569;
+      text-align: center;
+      font-size: 14px;
+      max-width: 500px;
+    }
+
+    .drop-zone.drag-over {
+      border-color: var(--accent);
+      background: #dbeafe;
+      color: #1e3a8a;
+    }
+
+    .status.error { color: var(--danger); }
+    .status.warning { color: var(--warning); }
+    .status.ok { color: var(--ok); }
+
+    .summary {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: stretch;
+    }
+
+    .summary div {
+      background: var(--accent-soft);
+      border-radius: 10px;
+      padding: 10px;
+      font-size: 14px;
+      width: 240px;
+      flex: 0 0 auto;
+    }
+
+    .summary strong {
+      display: block;
+      font-size: 18px;
+      margin-top: 4px;
+    }
+
+    .table-section {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .table-wrap {
+      overflow: auto;
+      flex: 1;
+      min-height: 0;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: white;
+    }
+
+    #resultTable {
+      flex: 1;
+      min-height: 0;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .tabulator {
+      border: 0;
+      font-size: 13px;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .tabulator-tableholder {
+      flex: 1;
+    }
+
+    .tabulator-footer {
+      min-height: 42px;
+      background: #f8fafc;
+      border-top: 1px solid #d1d5db;
+    }
+
+    .tabulator .tabulator-header {
+      font-weight: 700;
+    }
+
+    .tabulator .tabulator-row:nth-child(even) {
+      background-color: #f8fafc;
+    }
+
+    .tabulator .tabulator-row:nth-child(odd) {
+      background-color: #ffffff;
+    }
+
+    .raw {
+      max-width: 360px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .pill {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: #eef2ff;
+      color: #3730a3;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    details {
+      margin-top: 10px;
+    }
+
+    pre {
+      background: #111827;
+      color: #f9fafb;
+      padding: 12px;
+      border-radius: 8px;
+      overflow: auto;
+      font-size: 12px;
+    }
+  </style>
+    <link href="https://cdn.jsdelivr.net/npm/tabulator-tables@6.3.1/dist/css/tabulator.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tabulator-tables@6.3.1/dist/js/tabulator.min.js"></script>
+</head>
+<body>
+  <header>
+    <h1>Parseur de fichiers à format XML</h1>
+    <p>Charge un fichier XML de configuration, puis un fichier plat à parser : en-tête, lignes métier techniques, pied, puis message fonctionnel Z-MSG.</p>
+  </header>
+
+  <main>
+    <section class="card">
+      <div class="form-grid">
+        <div>
+          <label for="xmlFile">Fichier XML de configuration</label>
+          <input id="xmlFile" type="file" accept=".xml,text/xml,application/xml" />
+        </div>
+        <div>
+          <label for="dataFile">Fichier à parser</label>
+          <input id="dataFile" type="file" accept=".txt,.dat,.csv,.gz,.gzip,*/*" />
+        </div>
+        <div>
+          <label for="encoding">Encodage du fichier à parser</label>
+          <select id="encoding">
+            <option value="ISO-8859-1" selected>ISO-8859-1</option>
+            <option value="UTF-8">UTF-8</option>
+            <option value="windows-1252">Windows-1252</option>
+          </select>
+        </div>
+      </div>
+      <div class="drop-zone" id="dropZone">
+        Glisser-déposer ici le XML de configuration et le fichier à parser<br>
+        <small>Formats acceptés : .xml, fichier plat, .gz/.gzip</small>
+      </div>
+      <div class="restore-info" id="restoreInfo"></div>
+      <div class="actions">
+        <button id="parseBtn">Parser</button>
+        <button id="exportCsvBtn" class="secondary" disabled>Exporter CSV</button>
+        <span id="status" class="status">En attente des fichiers.</span>
+      </div>
+      <details style="margin-top:4px;">
+        <summary>Hypothèses de parsing</summary>
+        <pre style="max-height:160px; overflow:auto;">1. La première ligne du fichier est parsée avec FILE ID="EN_TETE".
+2. La dernière ligne du fichier est parsée avec FILE ID="EN_PIED".
+3. Les lignes intermédiaires sont parsées avec le FILE ID donné par C-FMTMSG dans l'en-tête : EDD, GE, AO, PFG ou RELI.
+4. Pour chaque ligne métier, C-APPL + SC-APPL permettent de trouver TYPE dans APPLICATION_CODE / SUB_CODE.
+5. Le champ Z-MSG est ensuite parsé avec FILE ID="TYPE" si ce format existe dans le XML.
+6. Cas FREGATE + EDD : parsing intermédiaire via FILE ID="FREGATE_EDD", puis agrégation des lignes ayant le même N-SEQ dans l’ordre de N-ENREG avant parsing fonctionnel.
+7. Si le fichier métier sélectionné est en .gz/.gzip, il est décompressé en mémoire avant parsing.</pre>
+      </details>
+    </section>
+
+    <section class="card">
+      <div class="summary" id="summary"></div>
+    </section>
+
+    <section class="card">
+      <div class="filters-row">
+        <div class="filter-box" style="width:320px;">
+          <label for="searchInput">Recherche globale</label>
+          <input id="searchInput" type="text" placeholder="Filtrer toutes les colonnes..." />
+        </div>
+        <div class="filter-box">
+          <label for="typeFilter">Type fonctionnel</label>
+          <select id="typeFilter">
+            <option value="">Tous</option>
+          </select>
+        </div>
+        <div class="filter-box">
+          <label for="lineKindFilter">Nature de ligne</label>
+          <select id="lineKindFilter">
+            <option value="">Toutes</option>
+            <option value="HEADER">HEADER</option>
+            <option value="MESSAGE">MESSAGE</option>
+            <option value="FOOTER">FOOTER</option>
+            <option value="ERROR">ERROR</option>
+          </select>
+        </div>
+      </div>
+    </section>
+
+    <section class="card table-section">
+      <div class="pager-bar">
+        <button id="firstPageBtn" type="button">⏮ Première</button>
+        <button id="prevPageBtn" type="button">◀ Précédente</button>
+        <span id="pageInfo" class="pager-info">Page - / -</span>
+        <button id="nextPageBtn" type="button">Suivante ▶</button>
+        <button id="lastPageBtn" type="button">Dernière ⏭</button>
+        <select id="pageSizeSelect" title="Lignes par page">
+          <option value="50">50</option>
+          <option value="100" selected>100</option>
+          <option value="250">250</option>
+          <option value="500">500</option>
+        </select>
+      </div>
+      <div class="table-wrap">
+        <div id="resultTable"></div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const TECHNICAL_FILE_IDS = new Set(['EDD', 'GE', 'AO', 'PFG', 'RELI']);
+
+    const STORAGE_KEYS = {
+      xmlContent: 'parser_xml_content',
+      xmlName: 'parser_xml_name',
+      dataContent: 'parser_data_content',
+      dataName: 'parser_data_name',
+      encoding: 'parser_encoding'
+    };
+
+    let restoredXmlContent = '';
+    let restoredDataContent = '';
+    let droppedXmlFile = null;
+    let droppedDataFile = null;
+
+    let parsedRows = [];
+    let visibleRows = [];
+    let resultTabulator = null;
+
+    const $ = (id) => document.getElementById(id);
+
+    window.addEventListener('load', restorePreviousSession);
+
+    $('parseBtn').addEventListener('click', parseFiles);
+    $('exportCsvBtn').addEventListener('click', exportCsv);
+    $('firstPageBtn').addEventListener('click', () => resultTabulator && resultTabulator.setPage('first'));
+    $('prevPageBtn').addEventListener('click', () => resultTabulator && resultTabulator.previousPage());
+    $('nextPageBtn').addEventListener('click', () => resultTabulator && resultTabulator.nextPage());
+    $('lastPageBtn').addEventListener('click', () => resultTabulator && resultTabulator.setPage('last'));
+    $('pageSizeSelect').addEventListener('change', () => {
+      if (resultTabulator) {
+        resultTabulator.setPageSize(parseInt($('pageSizeSelect').value, 10));
+        updatePagerInfo();
+      }
+    });
+
+    setupDropZone();
+    $('searchInput').addEventListener('input', render);
+    $('typeFilter').addEventListener('change', render);
+    $('lineKindFilter').addEventListener('change', render);
+
+    async function parseFiles() {
+      const xmlInput = $('xmlFile').files[0] || droppedXmlFile;
+      const dataInput = $('dataFile').files[0] || droppedDataFile;
+      const encoding = $('encoding').value;
+
+      if ((!xmlInput && !restoredXmlContent) || (!dataInput && !restoredDataContent)) {
+        setStatus('Sélectionne le fichier XML et le fichier à parser.', 'error');
+        return;
+      }
+
+      try {
+        setStatus('Lecture des fichiers...', '');
+
+        const xmlText = xmlInput
+          ? await readFileAsText(xmlInput, 'ISO-8859-1')
+          : restoredXmlContent;
+
+        const dataText = dataInput
+          ? await readPossiblyGzippedFileAsText(dataInput, encoding)
+          : restoredDataContent;
+
+        saveSession(
+          xmlInput ? xmlInput.name : localStorage.getItem(STORAGE_KEYS.xmlName) || 'restored.xml',
+          xmlText,
+          dataInput ? dataInput.name : localStorage.getItem(STORAGE_KEYS.dataName) || 'restored.dat',
+          dataText,
+          encoding
+        );
+
+        const config = parseXmlConfiguration(xmlText);
+        parsedRows = parseDataFile(dataText, config);
+
+        populateTypeFilter(parsedRows);
+        renderSummary(parsedRows, config);
+        render();
+
+        $('exportCsvBtn').disabled = parsedRows.length === 0;
+        setStatus(`${parsedRows.length} ligne(s) analysée(s).`, 'ok');
+      } catch (error) {
+        console.error(error);
+        setStatus(error.message || String(error), 'error');
+      }
+    }
+
+    function setupDropZone() {
+      const dropZone = $('dropZone');
+
+      ['dragenter', 'dragover'].forEach(eventName => {
+        dropZone.addEventListener(eventName, event => {
+          event.preventDefault();
+          event.stopPropagation();
+          dropZone.classList.add('drag-over');
+        });
+      });
+
+      ['dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, event => {
+          event.preventDefault();
+          event.stopPropagation();
+          dropZone.classList.remove('drag-over');
+        });
+      });
+
+      dropZone.addEventListener('drop', event => {
+        const files = Array.from(event.dataTransfer.files || []);
+        if (!files.length) return;
+
+        const xmlFile = files.find(file => file.name.toLowerCase().endsWith('.xml'));
+        const dataFile = files.find(file => file !== xmlFile);
+
+        if (xmlFile) droppedXmlFile = xmlFile;
+        if (dataFile) droppedDataFile = dataFile;
+
+        const xmlName = droppedXmlFile ? droppedXmlFile.name : 'XML non fourni';
+        const dataName = droppedDataFile ? droppedDataFile.name : 'fichier métier non fourni';
+
+        $('restoreInfo').innerHTML = `
+          Fichiers déposés :
+          <strong>${escapeHtml(xmlName)}</strong>
+          +
+          <strong>${escapeHtml(dataName)}</strong>
+        `;
+
+        if (droppedXmlFile && droppedDataFile) {
+          parseFiles();
+        } else {
+          setStatus('Dépose le XML et le fichier métier, ou complète avec les champs fichier.', 'warning');
+        }
+      });
+    }
+
+    function restorePreviousSession() {
+      const xmlName = localStorage.getItem(STORAGE_KEYS.xmlName);
+      const dataName = localStorage.getItem(STORAGE_KEYS.dataName);
+      const xmlContent = localStorage.getItem(STORAGE_KEYS.xmlContent);
+      const dataContent = localStorage.getItem(STORAGE_KEYS.dataContent);
+      const encoding = localStorage.getItem(STORAGE_KEYS.encoding);
+
+      if (encoding) {
+        $('encoding').value = encoding;
+      }
+
+      if (xmlContent && dataContent) {
+        restoredXmlContent = xmlContent;
+        restoredDataContent = dataContent;
+
+        $('restoreInfo').innerHTML = `
+          Dernière session restaurable :
+          <strong>${escapeHtml(xmlName || 'XML inconnu')}</strong>
+          +
+          <strong>${escapeHtml(dataName || 'fichier inconnu')}</strong>
+        `;
+
+        setStatus('Derniers fichiers restaurés en mémoire locale.', 'ok');
+      }
+    }
+
+    function saveSession(xmlName, xmlContent, dataName, dataContent, encoding) {
+      try {
+        localStorage.setItem(STORAGE_KEYS.xmlName, xmlName || '');
+        localStorage.setItem(STORAGE_KEYS.dataName, dataName || '');
+        localStorage.setItem(STORAGE_KEYS.encoding, encoding || 'ISO-8859-1');
+      } catch (e) {
+        console.warn('Impossible de sauvegarder les noms de fichiers', e);
+      }
+
+      let contentSaved = true;
+      try {
+        localStorage.setItem(STORAGE_KEYS.xmlContent, xmlContent || '');
+        localStorage.setItem(STORAGE_KEYS.dataContent, dataContent || '');
+        restoredXmlContent = xmlContent || '';
+        restoredDataContent = dataContent || '';
+      } catch (e) {
+        contentSaved = false;
+        console.warn('Impossible de sauvegarder le contenu des fichiers, probablement à cause de la taille.', e);
+      }
+
+      $('restoreInfo').innerHTML = `
+        Derniers fichiers :
+        <strong>${escapeHtml(xmlName || 'XML inconnu')}</strong>
+        +
+        <strong>${escapeHtml(dataName || 'fichier inconnu')}</strong>
+        ${contentSaved ? '' : '<br><span class="status warning">Contenu non mémorisé : fichier trop volumineux pour localStorage.</span>'}
+      `;
+    }
+
+    async function readPossiblyGzippedFileAsText(file, encoding) {
+      const lowerName = file.name.toLowerCase();
+      const isGzip = lowerName.endsWith('.gz') || lowerName.endsWith('.gzip');
+
+      if (!isGzip) {
+        return readFileAsText(file, encoding);
+      }
+
+      if (!window.pako) {
+        throw new Error('Impossible de lire le fichier gzip : la librairie pako n’est pas chargée.');
+      }
+
+      const compressedBuffer = await readFileAsArrayBuffer(file);
+      const decompressedBytes = pako.ungzip(new Uint8Array(compressedBuffer));
+      return new TextDecoder(encoding).decode(decompressedBytes);
+    }
+
+    function readFileAsArrayBuffer(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsArrayBuffer(file);
+      });
+    }
+
+    function readFileAsText(file, encoding) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsText(file, encoding);
+      });
+    }
+
+    function parseXmlConfiguration(xmlText) {
+      const parser = new DOMParser();
+      const xml = parser.parseFromString(xmlText, 'application/xml');
+      const parserError = xml.querySelector('parsererror');
+      if (parserError) {
+        throw new Error('XML invalide : ' + parserError.textContent.trim());
+      }
+
+      const files = new Map();
+      const fileAliases = new Map();
+      const routing = new Map();
+      const duplicateRoutes = [];
+
+      xml.querySelectorAll('FILE').forEach(fileNode => {
+        const id = fileNode.getAttribute('ID');
+        if (!id) return;
+
+        const fields = Array.from(fileNode.children)
+          .filter(child => child.tagName === 'FIELD')
+          .map(fieldNode => ({
+            id: fieldNode.getAttribute('ID') || '',
+            name: fieldNode.getAttribute('NAME') || fieldNode.getAttribute('ID') || '',
+            length: parseInt(fieldNode.getAttribute('LENGTH') || '0', 10),
+            format: fieldNode.getAttribute('FORMAT') || '',
+            oldDate: fieldNode.getAttribute('OLD_DATE') || '',
+            newDate: fieldNode.getAttribute('NEW_DATE') || '',
+            values: readFieldValues(fieldNode)
+          }));
+
+        const alias = fileNode.getAttribute('ALIAS') || '';
+        files.set(id, {
+          id,
+          title: fileNode.getAttribute('TITLE') || '',
+          alias,
+          abstract: (fileNode.getAttribute('ABSTRACT') || '').toLowerCase() === 'true',
+          length: parseInt(fileNode.getAttribute('LENGTH') || '0', 10),
+          fields,
+          implementationSelector: readImplementationSelector(fileNode)
+        });
+
+        alias.split(',')
+          .map(item => item.trim())
+          .filter(Boolean)
+          .forEach(aliasId => fileAliases.set(aliasId, id));
+      });
+
+      xml.querySelectorAll('APPLICATION_CODE').forEach(appNode => {
+        const appValue = normalizeCode(appNode.getAttribute('VALUE') || '');
+        appNode.querySelectorAll('SUB_CODE').forEach(subNode => {
+          const subValue = normalizeCode(subNode.getAttribute('VALUE') || '');
+          const key = routeKey(appValue, subValue);
+          const route = {
+            applicationCode: appValue,
+            subCode: subValue,
+            type: subNode.getAttribute('TYPE') || '',
+            fregate: (subNode.getAttribute('FREGATE') || '').toLowerCase() === 'true'
+          };
+
+          if (routing.has(key)) {
+            duplicateRoutes.push({ key, previous: routing.get(key), current: route });
+          }
+          routing.set(key, route);
+        });
+      });
+
+      return { files, fileAliases, routing, duplicateRoutes };
+    }
+
+    function readImplementationSelector(fileNode) {
+      const selectorNode = Array.from(fileNode.children)
+        .find(child => child.tagName === 'SELECT_IMPLEMENTATION_BY_FIELD');
+
+      if (!selectorNode) return null;
+
+      const fieldId = selectorNode.getAttribute('FIELD') || '';
+      const selectors = [];
+      let defaultRedirect = '';
+
+      selectorNode.querySelectorAll('FIELD_SELECTOR').forEach(node => {
+        const redirectToFileId = node.getAttribute('REDIRECT_TO_FILE_ID') || '';
+        const value = node.getAttribute('VALUE') || '';
+        const isDefault = (node.getAttribute('DEFAULT_REDIRECTION') || '').toLowerCase() === 'true';
+
+        if (isDefault) {
+          defaultRedirect = redirectToFileId;
+        } else {
+          selectors.push({ value, redirectToFileId });
+        }
+      });
+
+      return { fieldId, selectors, defaultRedirect };
+    }
+
+    function readFieldValues(fieldNode) {
+      const values = new Map();
+      fieldNode.querySelectorAll('VALUE').forEach(valueNode => {
+        values.set(valueNode.getAttribute('ID') || '', valueNode.getAttribute('TYPE') || '');
+      });
+      return values;
+    }
+
+    function parseDataFile(dataText, config) {
+      const lines = dataText
+        .replace(/\r\n/g, '\n')
+        .replace(/\r/g, '\n')
+        .split('\n')
+        .filter((line, index, arr) => !(index === arr.length - 1 && line === ''));
+
+      if (lines.length < 2) {
+        throw new Error('Le fichier doit contenir au minimum une ligne d’en-tête et une ligne de pied.');
+      }
+
+      const headerFormat = requiredFile(config, 'EN_TETE');
+      const footerFormat = requiredFile(config, 'EN_PIED');
+
+      const rows = [];
+      const header = parseFixedLine(lines[0], headerFormat);
+      rows.push(makeBaseRow(1, 'HEADER', 'EN_TETE', '', '', '', '', header, lines[0], []));
+
+      const technicalFormatId = normalizeCode(header.values['C-FMTMSG'] || '');
+      const technicalFormat = getFile(config, technicalFormatId);
+      if (!technicalFormat || !TECHNICAL_FILE_IDS.has(technicalFormatId)) {
+        rows.push(makeErrorRow(1, `Format technique C-FMTMSG inconnu ou non supporté : "${technicalFormatId}"`, lines[0]));
+        return rows;
+      }
+
+      const businessRows = parseBusinessLines(lines.slice(1, -1), technicalFormat, config);
+      rows.push(...businessRows);
+
+      const footer = parseFixedLine(lines[lines.length - 1], footerFormat);
+      rows.push(makeBaseRow(lines.length, 'FOOTER', 'EN_PIED', '', '', '', '', footer, lines[lines.length - 1], []));
+
+      return rows;
+    }
+
+    function parseBusinessLines(lines, technicalFormat, config) {
+      const rows = [];
+      const fregateGroups = new Map();
+
+      lines.forEach((line, index) => {
+        const lineNumber = index + 2;
+        const technical = parseFixedLine(line, technicalFormat);
+        const appCode = normalizeCode(technical.values['C-APPL'] || '');
+        const subCode = normalizeCode(technical.values['SC-APPL'] || '');
+        const route = config.routing.get(routeKey(appCode, subCode));
+        const isFregateEdd = technicalFormat.id === 'EDD' && route && route.fregate && getFile(config, 'FREGATE_EDD');
+
+        if (!isFregateEdd) {
+          rows.push(parseBusinessLine(line, lineNumber, technicalFormat, config));
+          return;
+        }
+
+        const warnings = [];
+        if (technical.expectedLength && line.length !== technical.expectedLength) {
+          warnings.push(`Longueur ligne ${line.length}, attendu ${technical.expectedLength}`);
+        }
+
+        const zmsg = technical.values['Z-MSG'] || '';
+        const fregateParsed = parseFixedLine(zmsg, getFile(config, 'FREGATE_EDD'));
+        const sequence = normalizeCode(fregateParsed.values['N-SEQ'] || '');
+        const recordNumber = parseInt(normalizeCode(fregateParsed.values['N-ENREG'] || '0'), 10);
+        const occurrence = fregateParsed.values['N-ENREG-OCC'] || '';
+
+        if (!sequence) {
+          rows.push(makeErrorRow(lineNumber, 'Message EDD/FREGATE sans N-SEQ : impossible d’agréger.', line));
+          return;
+        }
+
+        if (!fregateGroups.has(sequence)) {
+          fregateGroups.set(sequence, {
+            sequence,
+            appCode,
+            subCode,
+            route,
+            technicalFormat,
+            firstLineNumber: lineNumber,
+            rawLines: [],
+            parts: [],
+            warnings: []
+          });
+        }
+
+        const group = fregateGroups.get(sequence);
+        group.rawLines.push(line);
+        group.parts.push({ lineNumber, recordNumber, occurrence, fregateParsed: fregateParsed.values });
+        group.warnings.push(...warnings);
+      });
+
+      for (const group of fregateGroups.values()) {
+        rows.push(parseAggregatedFregateGroup(group, config));
+      }
+
+      rows.sort((a, b) => a.lineNumber - b.lineNumber);
+      return rows;
+    }
+
+    function parseAggregatedFregateGroup(group, config) {
+      const warnings = [...group.warnings];
+      const functionalType = group.route.type;
+      const functionalFormat = getFile(config, functionalType);
+
+      group.parts.sort((a, b) => a.recordNumber - b.recordNumber || a.lineNumber - b.lineNumber);
+      const aggregatedMessage = group.parts.map(part => part.occurrence).join('');
+
+      if (!functionalFormat) {
+        return makeBaseRow(
+          group.firstLineNumber,
+          'MESSAGE',
+          group.technicalFormat.id,
+          group.appCode,
+          group.subCode,
+          functionalType,
+          'true',
+          { values: {}, displayValues: {}, fieldNames: {}, fieldLabels: {} },
+          group.rawLines.join('\n'),
+          [`Format fonctionnel FILE ID="${functionalType}" introuvable dans le XML`, ...warnings]
+        );
+      }
+
+      const resolved = resolveFunctionalFormat(aggregatedMessage, functionalType, config);
+      const functional = resolved.functional;
+      const finalFunctionalType = resolved.finalFunctionalType;
+      warnings.push(...resolved.warnings);
+
+      functional.meta = {
+        fregateSequence: group.sequence,
+        physicalLineNumbers: group.parts.map(part => part.lineNumber),
+        physicalRecordNumbers: group.parts.map(part => part.recordNumber),
+        initialFunctionalType: functionalType,
+        finalFunctionalType
+      };
+
+      if (functional.expectedLength && aggregatedMessage.length < functional.expectedLength) {
+        warnings.push(`N-SEQ=${group.sequence} : message agrégé trop court (${aggregatedMessage.length}, attendu ${functional.expectedLength})`);
+      }
+
+      return makeBaseRow(
+        group.firstLineNumber,
+        'MESSAGE',
+        group.technicalFormat.id,
+        group.appCode,
+        group.subCode,
+        functionalType,
+        'true',
+        { values: {}, displayValues: {}, fieldNames: {}, fieldLabels: {} },
+        group.rawLines.join('\n'),
+        warnings,
+        functional
+      );
+    }
+
+    function parseBusinessLine(line, lineNumber, technicalFormat, config) {
+      const warnings = [];
+      const technical = parseFixedLine(line, technicalFormat);
+
+      if (technical.expectedLength && line.length !== technical.expectedLength) {
+        warnings.push(`Longueur ligne ${line.length}, attendu ${technical.expectedLength}`);
+      }
+
+      const appCode = normalizeCode(technical.values['C-APPL'] || '');
+      const subCode = normalizeCode(technical.values['SC-APPL'] || '');
+      const route = config.routing.get(routeKey(appCode, subCode));
+
+      let functionalType = route ? route.type : '';
+      let fregate = route ? route.fregate : false;
+      let functional = null;
+      let zmsg = technical.values['Z-MSG'] || '';
+
+      if (!route) {
+        warnings.push(`Aucun mapping trouvé pour C-APPL=${appCode}, SC-APPL=${subCode}`);
+      } else if (!getFile(config, functionalType)) {
+        warnings.push(`Format fonctionnel FILE ID="${functionalType}" introuvable dans le XML`);
+      } else {
+        const resolved = resolveFunctionalFormat(zmsg, functionalType, config);
+        functional = resolved.functional;
+        functionalType = resolved.finalFunctionalType;
+        warnings.push(...resolved.warnings);
+      }
+
+      return makeBaseRow(
+        lineNumber,
+        'MESSAGE',
+        technicalFormat.id,
+        appCode,
+        subCode,
+        functionalType,
+        fregate ? 'true' : 'false',
+        technical,
+        line,
+        warnings,
+        functional
+      );
+    }
+
+    function resolveFunctionalFormat(message, initialFunctionalType, config) {
+      const warnings = [];
+      const initialFormat = getFile(config, initialFunctionalType);
+
+      if (!initialFormat) {
+        return {
+          finalFunctionalType: initialFunctionalType,
+          functional: null,
+          warnings: [`Format fonctionnel FILE ID="${initialFunctionalType}" introuvable dans le XML`]
+        };
+      }
+
+      if (!initialFormat.abstract || !initialFormat.implementationSelector) {
+        return {
+          finalFunctionalType: initialFunctionalType,
+          functional: parseFixedLine(message, initialFormat),
+          warnings
+        };
+      }
+
+      const abstractParsed = parseFixedLine(message, initialFormat);
+      const selector = initialFormat.implementationSelector;
+      const selectorValue = normalizeCode(abstractParsed.values[selector.fieldId] || '');
+      const matchedSelector = selector.selectors.find(item => normalizeCode(item.value) === selectorValue);
+      const redirectToFileId = matchedSelector
+        ? matchedSelector.redirectToFileId
+        : selector.defaultRedirect;
+
+      if (!redirectToFileId) {
+        warnings.push(`FILE ID="${initialFunctionalType}" abstrait : aucune redirection trouvée pour ${selector.fieldId}=${selectorValue}`);
+        return {
+          finalFunctionalType: initialFunctionalType,
+          functional: abstractParsed,
+          warnings
+        };
+      }
+
+      const finalFormat = getFile(config, redirectToFileId);
+      if (!finalFormat) {
+        warnings.push(`FILE ID="${initialFunctionalType}" abstrait : redirection vers "${redirectToFileId}" introuvable`);
+        return {
+          finalFunctionalType: initialFunctionalType,
+          functional: abstractParsed,
+          warnings
+        };
+      }
+
+      const finalParsed = parseFixedLine(message, finalFormat);
+      finalParsed.meta = {
+        initialFunctionalType,
+        selectorField: selector.fieldId,
+        selectorValue,
+        redirectedTo: finalFormat.id
+      };
+
+      return {
+        finalFunctionalType: finalFormat.id,
+        functional: finalParsed,
+        warnings
+      };
+    }
+
+    function parseFixedLine(line, format) {
+      let cursor = 0;
+      const values = {};
+      const displayValues = {};
+      const fieldNames = {};
+      const fieldLabels = {};
+      const valueDescriptions = {};
+
+      for (const field of format.fields) {
+        const rawValue = line.substring(cursor, cursor + field.length);
+        const value = rawValue;
+        const trimmed = value.trim();
+        values[field.id] = value;
+        displayValues[field.id] = trimmed || value;
+        fieldNames[field.id] = field.name || field.id;
+        fieldLabels[field.id] = `${field.id} - ${field.name || field.id}`;
+        valueDescriptions[field.id] = field.values.get(value) || field.values.get(trimmed) || '';
+        cursor += field.length;
+      }
+
+      return {
+        formatId: format.id,
+        expectedLength: format.length || cursor,
+        values,
+        displayValues,
+        fieldNames,
+        fieldLabels,
+        valueDescriptions
+      };
+    }
+
+    
+    function makeBaseRow(lineNumber, lineKind, technicalFormat, appCode, subCode, functionalType, fregate, technical, rawLine, warnings = [], functional = null) {
+      const displayedFunctionalType = (
+        functional &&
+        functional.meta &&
+        functional.meta.initialFunctionalType &&
+        functional.meta.finalFunctionalType &&
+        functional.meta.initialFunctionalType !== functional.meta.finalFunctionalType
+      )
+        ? `${functional.meta.initialFunctionalType} → ${functional.meta.finalFunctionalType}`
+        : functionalType;
+
+      const row = {
+        lineNumber,
+        lineKind,
+        technicalFormat,
+        appCode,
+        subCode,
+        functionalType: displayedFunctionalType,
+        fregate,
+        warnings: warnings.join(' | '),
+        rawLine,
+        technicalValues: technical.values,
+        functionalValues: functional ? functional.values : {},
+        functionalFieldNames: functional ? functional.fieldNames : {},
+        functionalFieldLabels: functional ? functional.fieldLabels : {},
+        functionalValueDescriptions: functional ? functional.valueDescriptions : {},
+        functionalMeta: functional && functional.meta ? functional.meta : {},
+        functionalColumnOrder: functional && functional.fieldLabels
+          ? Object.keys(functional.fieldLabels).map(key => 'F_' + functional.fieldLabels[key])
+          : []
+      };
+
+      if (functional) flattenFunctionalFields(
+        row,
+        functional.displayValues || functional.values,
+        functional.fieldLabels || {},
+        functional.valueDescriptions || {}
+      );
+      return row;
+    }
+
+    function makeErrorRow(lineNumber, message, rawLine) {
+      return {
+        lineNumber,
+        lineKind: 'ERROR',
+        technicalFormat: '',
+        appCode: '',
+        subCode: '',
+        functionalType: '',
+        fregate: '',
+        warnings: message,
+        rawLine,
+        technicalValues: {},
+        functionalValues: {}
+      };
+    }
+
+    function flattenFunctionalFields(row, values, fieldLabels, valueDescriptions) {
+      for (const [key, value] of Object.entries(values)) {
+        const columnName = 'F_' + (fieldLabels[key] || key);
+        row[columnName] = value;
+        if (valueDescriptions[key]) {
+          row[columnName + '__title'] = valueDescriptions[key];
+        }
+      }
+    }
+
+    function getFile(config, id) {
+      if (!id) return null;
+      return config.files.get(id) || config.files.get(config.fileAliases.get(id)) || null;
+    }
+
+    function resolveFileId(config, id) {
+      const file = getFile(config, id);
+      return file ? file.id : id;
+    }
+
+    function requiredFile(config, id) {
+      const file = getFile(config, id);
+      if (!file) throw new Error(`Format obligatoire FILE ID="${id}" introuvable dans le XML.`);
+      return file;
+    }
+
+    function normalizeCode(value) {
+      return String(value || '').trim();
+    }
+
+    function routeKey(appCode, subCode) {
+      return `${normalizeCode(appCode)}::${normalizeCode(subCode)}`;
+    }
+
+    function populateTypeFilter(rows) {
+      const select = $('typeFilter');
+      const selected = select.value;
+      const types = Array.from(new Set(rows.map(r => r.functionalType).filter(Boolean))).sort();
+      select.innerHTML = '<option value="">Tous</option>' + types.map(type => `<option value="${escapeHtml(type)}">${escapeHtml(type)}</option>`).join('');
+      select.value = types.includes(selected) ? selected : '';
+    }
+
+    function renderSummary(rows, config) {
+      const messageCount = rows.filter(r => r.lineKind === 'MESSAGE').length;
+      const errorCount = rows.filter(r => r.lineKind === 'ERROR' || r.warnings).length;
+      const header = rows.find(r => r.lineKind === 'HEADER');
+      const technicalFormat = header ? normalizeCode(header.technicalValues['C-FMTMSG'] || '') : '';
+      const functionalTypes = Array.from(new Set(rows.map(r => r.functionalType).filter(Boolean))).length;
+      const duplicateCount = config.duplicateRoutes.length;
+
+      $('summary').innerHTML = `
+        <div>Format technique du fichier<strong>${escapeHtml(technicalFormat || '-')}</strong></div>
+        <div>Messages métier<strong>${messageCount}</strong></div>
+        <div>Types fonctionnels distincts<strong>${functionalTypes}</strong></div>
+        <div>Anomalies / alertes<strong>${errorCount}</strong></div>
+        <div>Mappings doublons XML<strong>${duplicateCount}</strong></div>
+      `;
+    }
+
+    function render() {
+      const search = $('searchInput').value.trim().toLowerCase();
+      const typeFilter = $('typeFilter').value;
+      const lineKindFilter = $('lineKindFilter').value;
+
+      visibleRows = parsedRows.filter(row => {
+        if (row.lineKind === 'HEADER' || row.lineKind === 'FOOTER') return false;
+        if (typeFilter && row.functionalType !== typeFilter) return false;
+        if (lineKindFilter && row.lineKind !== lineKindFilter) return false;
+        if (!search) return true;
+        return Object.values(row).some(value => {
+          if (value == null || typeof value === 'object') return false;
+          return String(value).toLowerCase().includes(search);
+        });
+      });
+
+      renderTable(visibleRows);
+    }
+
+    function getColumns(rows) {
+      const baseColumns = [
+        'lineNumber', 'appCode', 'subCode', 'functionalType', 'warnings'
+      ];
+
+      const functionalCols = [];
+      const seenFunctionalCols = new Set();
+
+      rows.forEach(row => {
+        (row.functionalColumnOrder || []).forEach(col => {
+          if (!seenFunctionalCols.has(col)) {
+            seenFunctionalCols.add(col);
+            functionalCols.push(col);
+          }
+        });
+      });
+
+      return [
+        ...baseColumns,
+        ...functionalCols
+      ];
+    }
+
+    function renderTable(rows) {
+      const columns = getColumns(rows).map(col => ({
+        title: columnLabel(col),
+        field: col,
+        sorter: 'string',
+        headerSort: true,
+        resizable: true,
+        minWidth: col === 'lineNumber' ? 70 : 140,
+        maxWidth: col === 'warnings' ? 420 : undefined,
+        formatter: function(cell) {
+          const value = cell.getValue() ?? '';
+          const rowData = cell.getRow().getData();
+          const title = rowData[col + '__title'] || '';
+
+          if (title) {
+            cell.getElement().setAttribute('title', title);
+          }
+
+          if (col === 'functionalType' || col === 'technicalFormat') {
+            return value ? `<span class="pill">${escapeHtml(String(value))}</span>` : '';
+          }
+
+          return escapeHtml(String(value));
+        }
+      }));
+
+      if (!resultTabulator) {
+        resultTabulator = new Tabulator('#resultTable', {
+          data: rows,
+          columns,
+          height: '100%',
+          layout: 'fitDataFill',
+          movableColumns: true,
+          virtualDom: true,
+          pagination: true,
+          paginationMode: 'local',
+          paginationSize: parseInt($('pageSizeSelect').value, 10),
+          paginationSizeSelector: false,
+          footerElement: false,
+          placeholder: 'Aucune donnée à afficher',
+          pageLoaded: updatePagerInfo,
+          dataFiltered: updatePagerInfo,
+          dataLoaded: updatePagerInfo
+        });
+        resultTabulator.on('pageLoaded', updatePagerInfo);
+        resultTabulator.on('dataProcessed', updatePagerInfo);
+        setTimeout(updatePagerInfo, 0);
+      } else {
+        resultTabulator.setColumns(columns);
+        resultTabulator.setPageSize(parseInt($('pageSizeSelect').value, 10));
+        resultTabulator.replaceData(rows).then(updatePagerInfo);
+      }
+    }
+
+    function updatePagerInfo() {
+      if (!resultTabulator) {
+        $('pageInfo').textContent = 'Page - / -';
+        return;
+      }
+
+      const currentPage = resultTabulator.getPage() || 1;
+      const maxPage = resultTabulator.getPageMax() || 1;
+      const totalRows = visibleRows.length || 0;
+
+      $('pageInfo').textContent = `Page ${currentPage} / ${maxPage} — ${totalRows} ligne(s)`;
+      $('firstPageBtn').disabled = currentPage <= 1;
+      $('prevPageBtn').disabled = currentPage <= 1;
+      $('nextPageBtn').disabled = currentPage >= maxPage;
+      $('lastPageBtn').disabled = currentPage >= maxPage;
+    }
+
+    function columnLabel(col) {
+      const labels = {
+        lineNumber: '#',
+        appCode: 'C-APPL',
+        subCode: 'SC-APPL',
+        functionalType: 'Type fonctionnel',
+        warnings: 'Alertes'
+      };
+      if (labels[col]) return labels[col];
+      if (col.startsWith('F_')) return col.substring(2);
+      return col;
+    }
+
+    function formatCell(col, value) {
+      const safe = escapeHtml(String(value));
+      if (col === 'lineKind' || col === 'functionalType' || col === 'technicalFormat') {
+        return safe ? `<span class="pill">${safe}</span>` : '';
+      }
+      return safe;
+    }
+
+    function exportCsv() {
+      const rows = visibleRows.length ? visibleRows : parsedRows;
+      const columns = getColumns(rows);
+      const csv = [
+        columns.join(';'),
+        ...rows.map(row => columns.map(col => csvCell(row[col] ?? '')).join(';'))
+      ].join('\n');
+
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'resultat_parse.csv';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }
+
+    function csvCell(value) {
+      const text = String(value).replace(/"/g, '""');
+      return `"${text}"`;
+    }
+
+    function setStatus(message, level) {
+      const status = $('status');
+      status.textContent = message;
+      status.className = 'status' + (level ? ' ' + level : '');
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+  </script>
+</body>
+</html>
